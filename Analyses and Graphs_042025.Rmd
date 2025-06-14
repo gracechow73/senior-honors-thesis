@@ -1,0 +1,326 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(tidytext)
+library(tidyverse)
+library(lmerTest)
+library(lme4)
+```
+
+
+Lmer Models
+```{r}
+library("performance")
+
+#mixed(FirstSingPerc ~ condition * ConvoType * embodiedSpeech + sex + (1|pid), data=full_data)
+
+#grand mean center embodied speech
+full_data$embodiedSpeech_center <- full_data$embodiedSpeech - mean(na.omit(full_data$embodiedSpeech))
+
+mod1 <- lmer(FirstSingPerc ~ condition * ConvoType * embodiedSpeech_center + sex + (1|pid), data=full_data)
+summary(mod1)
+
+mod2 <- lmer(FirstPlurPerc ~ condition * ConvoType * embodiedSpeech + sex + (1|pid), data=full_data)
+summary(mod2)
+report(mod2)
+
+rm_mod1 <- lmer(FirstSingPerc ~ (1|pid), data=full_data)
+icc(rm_mod1)
+
+rm_mod3 <- lmer(ThirdPerc ~ (1|pid), data=full_data)
+icc(rm_mod3)
+
+#with Third Person
+full_data$embodiedSpeech_center <- full_data$embodiedSpeech - mean(na.omit(full_data$embodiedSpeech))
+mod_plur <- lmer(FirstPlurPerc ~ condition * ConvoType * embodiedSpeech_center + sex + (1|pid), data=full_data)
+summary(mod_plur)
+```
+
+
+
+## ANOVA Models ##
+```{r}
+full_data <- read.csv("C:/Users/grace/OneDrive - University of North Carolina at Chapel Hill/PSYC 693H - Honors Thesis/Datasets/Full Data.csv")
+full_data$condition <- as.factor(full_data$condition)
+full_data$ConvoType <- as.factor(full_data$ConvoType)
+full_data$condition <- droplevels(full_data$condition)
+full_data$ConvoType <- droplevels(full_data$ConvoType)
+full_data <- na.omit(full_data)
+full_data$pid <- as.factor(full_data$pid)
+#table(full_data$pid, full_data$ConvoType)
+summary(full_data$condition)
+
+#mod1 <- lmer(FirstSingPerc ~ condition * ConvoType * embodiedSpeech_center + sex + (1|pid), data=full_data)
+
+#1ST PERSON
+aov1 <- aov(FirstSingPerc ~ condition * ConvoType * embodiedSpeech + sex + Error(pid/ConvoType), data=full_data)
+summary(aov1)
+
+aov2 <- aov(FirstPlurPerc ~ condition * ConvoType * embodiedSpeech + sex + Error(pid/ConvoType), data=full_data)
+report_table(aov2, digits = 4)
+summary(aov2)
+print(report_table(aov2), digits = 4)
+
+
+anova_table <- tidy(aov2)
+colnames(anova_table)[which(names(anova_table) == "df")] <- "F(1)"
+print(anova_table, digits = 4)
+
+aov_ratio <- aov((FirstPlurPerc/FirstSingPerc) ~ condition * ConvoType * embodiedSpeech + sex + Error(pid/ConvoType), data=full_data)
+summary(aov_ratio)
+
+ggplot(full_data, aes(x=embodiedSpeech, y=(FirstPlurPerc/FirstSingPerc))) + geom_point() + geom_smooth(method="lm")
+
+
+
+library(report)
+report::report(aov2)
+
+#histogram:
+ggplot(full_data, aes(x=FirstSingPerc)) + geom_histogram()
+
+
+# 3RD PERSON
+aov3 <- aov(ThirdSingPerc ~ condition * ConvoType * embodiedSpeech + sex + Error(pid/ConvoType), data=full_data)
+summary(aov3)
+report(aov3)
+
+aov4 <-aov(ThirdPlurPerc ~ condition * ConvoType * embodiedSpeech + sex + Error(pid/ConvoType), data=full_data)
+summary(aov4)
+
+aov5 <- aov((ThirdPlurPerc/ThirdSingPerc) ~ condition * ConvoType * embodiedSpeech + sex + Error(pid/ConvoType), data=full_data)
+summary(aov5)
+
+aov_third <-aov(ThirdTotal ~ condition * ConvoType * embodiedSpeech + sex + Error(pid/ConvoType), data=full_data)
+summary(aov_third)
+
+library(emmeans)
+#probe interaction in Third Person Singular model
+summary(emtrends(aov3, var = "embodiedSpeech", ~condition))
+
+
+#probe interaction for Third Person Plural
+summary(emtrends(aov_third, var = "embodiedSpeech", ~condition))
+
+library(ggplot2)
+ggplot(full_data, aes(x=embodiedSpeech, y=ThirdPerc, color = condition)) + geom_point() + geom_smooth(method="lm")
+```
+# p-values #
+```{r}
+library(report)
+library(parameters)
+summary(aov3)
+report(aov3)
+report_table(aov1)
+
+thirdCond_influenza <- lm(ThirdTotal ~ embodiedSpeech, data = full_data, subset = (condition == "influenza"))
+summary(thirdCond_influenza)
+
+thirdCond_placebo <- lm(ThirdTotal ~ embodiedSpeech, data = full_data, subset = (condition == "placebo"))
+summary(thirdCond_placebo)
+
+report_table(aov4)
+```
+
+
+## Graphs ##
+```{r}
+library(ggplot2)
+#1st Person Singular vs. Embodied Speech
+FirstSing_plot_blue <- ggplot(full_data, aes(x=embodiedSpeech, y=FirstSingPerc)) + geom_point(size=3) + geom_smooth(method="lm", size=3, color="lightcoral") + theme_bw() +
+  labs(x = "Embodied Speech", y = "1st Person Singular Usage (%)") +
+  theme(
+    axis.title = element_text(size = 30), #x and y axis labels
+    axis.text = element_text(size = 24), #numbers along the axes
+    legend.text = element_text(size = 24), #content of the legend
+    legend.title = element_text(size = 24), #legend title
+    strip.text = element_text(size = 32), #facet labels
+    plot.margin = margin(1,1,1.5,1.2, "cm")
+  )
+
+ggsave("C:/Users/grace/Desktop/firstSing_graph_blue.png", plot=FirstSing_plot_blue, width=14, height=9, units="in", dpi=1500, device="png")
+
+
+#1st Person Plural vs. Embodied Speech
+FirstPlur_plot_orange <- ggplot(full_data, aes(x=embodiedSpeech, y=FirstPlurPerc)) + geom_point(size=3) +
+  geom_smooth(method="lm", size=3, color = "orange") + theme_bw() +
+  labs(x = "Embodied Speech", y = "1st Person Plural Usage (%)") +
+  theme(
+    axis.title = element_text(size = 30), #x and y axis labels
+    axis.text = element_text(size = 24), #numbers along the axes
+    legend.text = element_text(size = 24), #content of the legend
+    legend.title = element_text(size = 24), #legend title
+    strip.text = element_text(size = 32), #facet labels
+    plot.margin = margin(1,1,1.5,1.2, "cm")
+  )
+ggsave("C:/Users/grace/Desktop/firstPlur_graph_orange.png", plot=FirstPlur_plot_orange, width=14, height=9, units="in", dpi=1500, device="png")
+
+
+#3rd Person Singular interaction btwn Embodied Speech & Inflammation
+ThirdSing_plot_orange <- ggplot(full_data, aes(x=embodiedSpeech, y=ThirdSingPerc, color = condition)) +
+  geom_point(size=3) +
+  geom_smooth(method="lm", size=3) +
+  labs(x = "Embodied Speech", y="3rd Person Singular Usage (%)") +
+  scale_color_manual(values = c("orange", "sienna4")) + #change condition color
+  theme(
+    axis.title = element_text(size = 30), #x and y axis labels
+    axis.text = element_text(size = 24), #numbers along the axes
+    legend.text = element_text(size = 24), #content of the legend
+    legend.title = element_text(size = 24), #legend title
+    strip.text = element_text(size = 32), #facet labels
+    plot.margin = margin(1,1,1.5,1.2, "cm"), #add border around plot
+    legend.position = "top"
+  )
+
+ggsave("C:/Users/grace/Desktop/thirdPerson_graph_orange.png", plot=ThirdSing_plot_orange, width=14, height=9, units="in", dpi=1500, device="png")
+
+
+#3rd Person Plural interaction btwn Embodied Speech & Condition
+ThirdPlur_plot <- ggplot(full_data, aes(x=embodiedSpeech, y=ThirdPlurPerc, color = ConvoType)) +
+  geom_point(size=3) +
+  geom_smooth(method="lm", size=3) +
+  labs(x = "Embodied Speech", y="3rd Person Singular Usage (%)") +
+  scale_color_manual(values = c("orange", "sienna4")) + #change condition color
+  theme(
+    axis.title = element_text(size = 30), #x and y axis labels
+    axis.text = element_text(size = 24), #numbers along the axes
+    legend.text = element_text(size = 24), #content of the legend
+    legend.title = element_text(size = 24), #legend title
+    strip.text = element_text(size = 32), #facet labels
+    plot.margin = margin(1,1,1.5,1.2, "cm"), #add border around plot
+    legend.position = "top"
+  )
+
+ggsave("C:/Users/grace/Desktop/thirdPersonPlural.png", plot=ThirdPlur_plot, width=14, height=9, units="in", dpi=1500, device="png")
+
+#TOTAL THIRD PERSON
+ThirdTotal_plot <- ggplot(full_data, aes(x=embodiedSpeech, y=ThirdTotal, color = condition)) +
+  geom_point(size=3) +
+  geom_smooth(method="lm", size=3) +
+  labs(x = "Embodied Speech", y="3rd Person Singular Usage (%)") +
+  scale_color_manual(values = c("orange", "sienna4")) + #change condition color
+  theme(
+    axis.title = element_text(size = 30), #x and y axis labels
+    axis.text = element_text(size = 24), #numbers along the axes
+    legend.text = element_text(size = 24), #content of the legend
+    legend.title = element_text(size = 24), #legend title
+    strip.text = element_text(size = 32), #facet labels
+    plot.margin = margin(1,1,1.5,1.2, "cm"), #add border around plot
+    legend.position = "top"
+  )
+
+ggsave("C:/Users/grace/Desktop/thirdTotal_plot.png", plot=ThirdTotal_plot, device="png", width=14, height=9)
+
+report_table(aov_third)
+
+
+ppt_plot <- ggplot(full_data, aes(x=embodiedSpeech, y=ThirdSingPerc, color = condition)) +
+  geom_point(size=3) +
+  geom_smooth(method="lm", size=3) +
+  labs(x = "Embodied Speech", y="3rd Person Singular Usage (%)") +
+  scale_color_manual(values = c("lightcoral", "turquoise")) + #change condition color
+  theme(
+    axis.title = element_text(size = 30), #x and y axis labels
+    axis.text = element_text(size = 24), #numbers along the axes
+    legend.text = element_text(size = 24), #content of the legend
+    legend.title = element_text(size = 24), #legend title
+    strip.text = element_text(size = 32), #facet labels
+    plot.margin = margin(1,1,1.5,1.2, "cm"), #add border around plot
+    legend.position = "top"
+  )
+ggsave("C:/Users/grace/Desktop/ppt_plot.png", plot=ppt_plot, width=14, height=9, units="in", device="png")
+```
+
+
+
+## Validation of Language-Based Measures ##
+```{r}
+full_data <- read.csv("C:/Users/grace/OneDrive - University of North Carolina at Chapel Hill/PSYC 693H - Honors Thesis/Datasets/Full Data.csv")
+
+# SOO: Pronouns ~ IOS
+friend_data <- full_data |> filter(ConvoType == "friendConvo")
+lm(FirstPlurPerc/FirstSingPerc ~ post_prime_ios_friend, data=friend_data)
+
+cleanF_data <- na.omit(data.frame(
+  pronUse = friend_data$FirstPlurPerc,
+  ios = friend_data$post_prime_ios_friend
+))
+cor(cleanF_data$pronUse, cleanF_data$ios)
+cor.test(cleanF_data$pronUse, cleanF_data$ios)
+
+
+stranger_data <- full_data |> filter(ConvoType == "strangerConvo")
+lm(FirstPlurPerc/FirstSingPerc ~ post_prime_ios_friend, data=stranger_data)
+
+cleanS_data <- na.omit(data.frame(
+  pronUse = stranger_data$FirstPlurPerc,
+  ios = stranger_data$post_prime_ios_stranger
+))
+cor(cleanS_data$pronUse, cleanS_data$ios)
+cor.test(cleanS_data$pronUse, cleanS_data$ios)
+
+
+cor.test(full_data$FirstSingPerc, full_data$FirstPlurPerc)
+
+
+# Interoception: Embodied Speech ~ HBD
+embSpeech <-rowMeans(full_data[, c("interoMean_friend", "interoMean_stranger")], na.rm=TRUE)
+
+cor.test(embSpeech, full_data$Score, use = "complete.obs")
+
+
+# Create scatter plot
+clean_data <- na.omit(data.frame(embSpeech, Score = full_data$Score))
+ggplot(clean_data, aes(x = embSpeech, y = Score)) +
+  geom_point(color = "black", alpha = 0.6) +  # Scatter points
+  geom_smooth(method = "lm", color = "skyblue", se = FALSE) +  # Regression line
+  labs(title = "Scatter Plot of Embodied Speech vs. Score",
+       x = "Embodied Speech",
+       y = "Score") +
+  theme_minimal()
+
+
+# Interoception: Embodied Speech ~ ISQ
+cor(embSpeech, full_data$isq_sum, use = "complete.obs")
+cor.test(embSpeech, full_data$isq_sum)
+
+hist(embSpeech)
+hist(full_data$Score)
+hist(full_data$FirstPlurPerc/full_data$FirstSingPerc)
+
+
+# Correlation Matrix
+cor(cleanF_data$pronUse, cleanF_data$ios)
+
+cor(data.frame(cleanF_data$pronUse, cleanF_data$ios, embSpeech, 
+               full_data$Score, full_data$isq_sum), use = "complete.obs")
+```
+
+
+
+## Demographics Analyses ##
+```{r}
+#Sex count
+compiled |> na.omit() |> group_by(sex) |> count()
+```
+
+
+## Graphs for Presentation ##
+```{r}
+FirstPlur_pres <- ggplot(full_data, aes(x=embodiedSpeech, y=FirstPlurPerc)) + geom_point(size=3) +
+  geom_smooth(method="lm", size=3, color = "turquoise") + theme_bw() +
+  labs(x = "Embodied Speech", y = "1st Person Plural Usage (%)") +
+  theme(
+    axis.title = element_text(size = 30), #x and y axis labels
+    axis.text = element_text(size = 24), #numbers along the axes
+    legend.text = element_text(size = 24), #content of the legend
+    legend.title = element_text(size = 24), #legend title
+    strip.text = element_text(size = 32), #facet labels
+    plot.margin = margin(1,1,1.5,1.2, "cm")
+  )
+ggsave("C:/Users/grace/Desktop/firstPlur_pres.png", plot=FirstPlur_pres, width=14, height=9, device="png")
+```
+

@@ -1,0 +1,196 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+#Libraries
+library(tidyverse)
+library(dplyr)
+```
+
+## Join Datasets ##
+```{r}
+#Datasets
+Demographics <- read.csv('C:/Users/grace/OneDrive - University of North Carolina at Chapel Hill/PSYC 693H - Honors Thesis/Datasets/BSB_core_demos_cleaned_20240807.csv')
+Questionnaires <- read.csv("C:/Users/grace/OneDrive - University of North Carolina at Chapel Hill/PSYC 693H - Honors Thesis/Datasets/BSB_S1_questionnaires_cleaned_20240619.csv")
+Heartbeat <- read.csv("C:/Users/grace/OneDrive - University of North Carolina at Chapel Hill/PSYC 693H - Honors Thesis/Datasets/heartbeat_counting_means_mf_20250128.csv") |> select(-c(1,6))
+Heartbeat$ID <- as.numeric(str_remove(Heartbeat$ID, "BSB"))
+SocialInt <- read.csv("C:/Users/grace/OneDrive - University of North Carolina at Chapel Hill/PSYC 693H - Honors Thesis/Datasets/BSB_S2_social_interactions_cleaned_all_20240527.csv")
+```
+
+```{r}
+#Compiled dataset (demos, questionnaires, social int)
+compiled <- Demographics |> arrange(pid)
+compiled <- compiled |> left_join(Questionnaires, join_by(pid == PID))
+compiled <- compiled |> left_join(SocialInt, join_by(pid == pid))
+compiled <- compiled |> left_join(Heartbeat, join_by(pid == ID))
+
+data <- compiled |>
+  mutate(interoMean_friend = rowMeans(compiled[,16:20], na.rm = TRUE),
+         interoMean_stranger = rowMeans(compiled[,21:25], na.rm = TRUE)) |>
+  select(-c(16:20, 21:25))  #remove scores
+
+write.csv(data, "C:/Users/grace/OneDrive - University of North Carolina at Chapel Hill/PSYC 693H - Honors Thesis/Datasets/Compiled Data.csv")
+```
+
+
+## Count Pronouns ->  allWords_pronounCount.csv ##
+```{r}
+#GOAL: Count pronouns in each conversation for each participant (for self-other overlap measure)
+
+file_list <- list.files("C:/Users/grace/Desktop/wordLevel_csv", recursive = TRUE, pattern=".csv", full.names = TRUE)  # Folder to extract transcribed conversations from
+
+folder_path <- "C:/Users/grace/Desktop/wordLevel_csv"  # Folder path
+
+# Create new empty data frame outlining all necessary information
+output <- data.frame(
+  PID = integer(),
+  ConvoType = character(),
+  PtcTotalWC = integer(),
+  PtcFirstSing = integer(),
+  PtcFirstPlural = integer(),
+  FirstSingPerc = numeric(),
+  FirstPlurPerc = numeric(),
+  OtherTotalWC = integer(),
+  OtherFirstSing = integer(),
+  OtherFirstPlural = integer(),
+  #SecondTotal = integer(),
+  ThirdSing = numeric(),
+  ThirdSingPerc = numeric(),
+  ThirdPlural = numeric(),
+  ThirdPlurPerc = numeric(),
+  ThirdTotal = numeric()
+)
+
+for(file_path in file_list){   # For each conversation,
+  full_path <- paste(folder_path, file_path, sep="")
+  df <- read_csv(file_path, show_col_types = FALSE)   # Read in the conversation csv
+  
+  pid <- str_extract(file_path, "\\d{3}")   # Extrat PID from file name
+  
+  convoType <- str_extract(file_path, "(friendConvo|strangerConvo)")
+  
+  #PartTag <- str_extract(file_path, "part[0-9]{1}")
+  
+  #Count Participant Pronoun Use
+  ptcTotalWC <- df |> filter(Speaker_Role == "Participant") |> nrow()
+  ptcFirstSing <- df |> filter(Speaker_Role == "Participant", upos == "PRON", PronPerson == 1, PronNumber == "Sing") |> nrow()
+  ptcFirstPlur <- df |> filter(Speaker_Role == "Participant", upos == "PRON", PronPerson == 1, PronNumber == "Plur") |> nrow()
+  
+  #Count Other's Pronoun Use
+  otherTotalWC <- df |> filter(Speaker_Role %in% c("Friend", "Stranger")) |> nrow()
+  otherFirstSing <- df |> filter(Speaker_Role %in% c("Friend", "Stranger"), upos == "PRON", PronPerson == 1, PronNumber == "Sing") |> nrow()
+  otherFirstPlur <- df |> filter(Speaker_Role %in% c("Friend", "Stranger"), upos == "PRON", PronPerson == 1, PronNumber == "Plur") |> nrow()
+  
+  #Count Third Person Use (Participant)
+  thirdSingPerson <- df |> filter(Speaker_Role == "Participant", upos == "PRON", PronPerson == 3, PronNumber == "Sing") |> nrow()
+  thirdPlurPerson <- df |> filter(Speaker_Role == "Participant", upos == "PRON", PronPerson == 3, PronNumber == "Plur") |> nrow()
+  thirdTotal <- df |> filter(Speaker_Role == "Participant", upos == "PRON", PronPerson == 3) |> nrow()
+  
+  
+  #2nd Person
+  #secondTotal  <- df |> filter(upos == "PRON", PronPerson == 2) |> nrow()
+  
+  #3rd Person
+  #thirdSing <- df |> filter(upos == "PRON", PronPerson == 3, PronNumber == "Sing") |> nrow()
+  #thirdPlur <- df |> filter(upos == "PRON", PronPerson == 3, PronNumber == "Plur") |> nrow()
+  #thirdTotal <- thirdSing + thirdPlur
+  
+  
+  output <- rbind(output, data.frame(  # Put all counts together for one participant
+      PID = pid,
+      ConvoType = convoType,
+      #PartTag = PartTag,
+      PtcTotalWC = ptcTotalWC,
+      PtcFirstSing = ptcFirstSing,
+      PtcFirstPlural = ptcFirstPlur,
+      FirstSingPerc = ptcFirstSing/ptcTotalWC,
+      FirstPlurPerc = ptcFirstPlur/ptcTotalWC,
+      OtherTotalWC = otherTotalWC,
+      OtherFirstSing = otherFirstSing,
+      OtherFirstPlural = otherFirstPlur,
+      ThirdSing = thirdSingPerson,
+      ThirdSingPerc = thirdSingPerson/ptcTotalWC,
+      ThirdPlur = thirdPlurPerson,
+      ThirdPlurPerc = thirdPlurPerson/ptcTotalWC,
+      ThirdTotal = thirdTotal/ptcTotalWC
+  ))
+}
+
+write.csv(output, file.path("C:/Users/grace/Desktop", "allWords_pronounCount.csv"), row.names = FALSE)  # New csv of all participants' pronoun counts
+```
+
+
+## Calculate Embodied Speech from No Pronouns files -> add to allWords_pronounCount.csv ##
+```{r}
+no_prn_files <- list.files("C:/Users/grace/Desktop/noFirstPrs_csv", full.names = TRUE, pattern = "\\.csv$")
+pronounCount <- read.csv("C:/Users/grace/Desktop/allWords_pronounCount.csv")
+
+output_noPrns <- data.frame(
+  PID = integer(),
+  ConvoType = character(),
+  embodiedSpeech = numeric()
+)
+
+for (file_path in no_prn_files) {
+  df <- read.csv(file_path)
+  
+  PID <- str_extract(file_path, "\\d{3}")
+  convoType <- str_extract(file_path, "(friendConvo|strangerConvo)")
+  
+  embodiedSpeech <- df |> filter(Speaker_Role == "Participant") |> 
+    pull(Intero_concat) |> 
+    mean(na.rm = TRUE)
+  
+  output_noPrns <- rbind(output_noPrns, data.frame(
+      PID = as.numeric(PID),
+      ConvoType = convoType,
+      embodiedSpeech = embodiedSpeech
+    )
+  )
+} 
+
+pronounCount <- pronounCount |> left_join(output_noPrns)
+write.csv(pronounCount, file.path("C:/Users/grace/Desktop", "allWords_pronounCount.csv"), row.names = FALSE)
+```
+
+
+## Combine Demos & Surveys Data w/ Embodied Speech & Pronouns -> Full Data ##
+```{r}
+full_data <- read.csv("C:/Users/grace/OneDrive - University of North Carolina at Chapel Hill/PSYC 693H - Honors Thesis/Datasets/Compiled Data.csv")
+pronoun_data <- read.csv("C:/Users/grace/Desktop/allWords_pronounCount.csv")
+
+full_data <- full_data |> dplyr::left_join(pronoun_data, by = c("pid" = "PID"))
+write.csv(full_data, "C:/Users/grace/OneDrive - University of North Carolina at Chapel Hill/PSYC 693H - Honors Thesis/Datasets/Full Data.csv")
+```
+
+
+
+SKIP!!  ->  ## Create Files with No 1st Person Pronouns ##
+```{r}
+output_folder <- "C:/Users/grace/Desktop/noFirstPrs_csv"
+
+for(file_path in file_list) {
+  PID <- str_extract(file_path, "BSB\\d{3}")
+  convoType <- str_extract(file_path, "(friendConvo|strangerConvo)")
+  Part_tag <- str_extract(file_path, "part[0-9]{1}")
+  print(PID)
+  
+  df <- read_csv(file_path, show_col_types = FALSE)
+  
+  #Take out all first person pronouns
+  output <- df |> filter(!(upos == "PRON" &  PronPerson == 1))
+  
+  #Create the output file path
+  file_base <- str_remove(basename(file_path), "\\.csv$")
+  
+  output_file <- file.path(output_folder, paste0(file_base, "_noFirstPrs.csv"))
+  if(!is.na(Part_tag)){
+    output_file <- file.path(output_folder, paste0(file_base, "_", Part_tag, "_noFirstPrs.csv"))
+  }
+  
+  write_csv(output, output_file)
+  rm(df, output)
+}
+```
